@@ -22,6 +22,7 @@ use op_succinct_proposer::{
     AggProofRequest, ProofResponse, ProofStatus, SpanProofRequest, SuccinctProposerConfig,
     ValidateConfigRequest, ValidateConfigResponse,
 };
+use rand::Rng;
 use sp1_sdk::{
     network::{
         proto::network::{ExecutionStatus, FulfillmentStatus},
@@ -182,7 +183,21 @@ async fn request_span_proof(
         }
     };
 
-    let client = ProverClient::builder().network().build();
+    let cluster_1_weight = env::var("CLUSTER_1_WEIGHT")
+        .unwrap_or_else(|_| "50".to_string())
+        .parse::<u8>()
+        .unwrap_or(50);
+
+    let private_key = if rand::thread_rng().gen_range(0..100) < cluster_1_weight {
+        env::var("NETWORK_PRIVATE_KEY_1").unwrap()
+    } else {
+        env::var("NETWORK_PRIVATE_KEY_2").unwrap()
+    };
+    let client = ProverClient::builder()
+        .network()
+        .private_key(&private_key)
+        .build();
+
     let proof_id = client
         .prove(&state.range_pk, &sp1_stdin)
         .compressed()

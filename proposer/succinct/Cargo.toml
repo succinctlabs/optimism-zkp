@@ -22,6 +22,7 @@ op-succinct-host-utils.workspace = true
 
 # sp1
 sp1-sdk.workspace = true
+rand.workspace = true
 
 anyhow.workspace = true
 dotenv.workspace = true

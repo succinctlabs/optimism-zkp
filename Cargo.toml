@@ -114,6 +114,8 @@ sp1-zkvm = { version = "4.0.0", features = ["verify", "embedded"] }
 # TODO: Switch back to version tag once the Docker workspace directory change is merged.
 sp1-build = { git = "https://github.com/succinctlabs/sp1", branch = "dev" }
 
+rand = { version = "0.8.5", default-features = false }
+
 [profile.release-client-lto]
 inherits = "release"
 panic = "abort"

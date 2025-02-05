@@ -4181,6 +4181,7 @@ dependencies = [
  "op-succinct-build-utils",
  "op-succinct-client-utils",
  "op-succinct-host-utils",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "serde_repr",
