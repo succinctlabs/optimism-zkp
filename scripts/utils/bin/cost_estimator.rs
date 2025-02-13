@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
+use hana_host::celestia::CelestiaCfg;
 use kona_host::single::SingleChainHost;
 use log::info;
 use op_succinct_host_utils::{
@@ -77,7 +78,16 @@ async fn execute_blocks_and_write_stats_csv(
     // because the server and client are long-lived tasks.
     let handles = host_clis.iter().cloned().map(|host_cli| {
         tokio::spawn(async move {
-            let oracle = start_server_and_native_client(host_cli).await.unwrap();
+            let oracle = start_server_and_native_client(
+                host_cli,
+                CelestiaCfg {
+                    celestia_connection: None,
+                    auth_token: None,
+                    namespace: None,
+                },
+            )
+            .await
+            .unwrap();
             get_proof_stdin(oracle).unwrap()
         })
     });

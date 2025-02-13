@@ -7,6 +7,7 @@ use alloy_consensus::Header;
 use alloy_primitives::B256;
 use alloy_sol_types::sol;
 use anyhow::Result;
+use hana_host::celestia::{CelestiaCfg, CelestiaChainHost};
 use kona_host::single::SingleChainHost;
 use kona_preimage::{BidirectionalChannel, HintWriter, NativeChannel, OracleReader};
 use log::info;
@@ -49,6 +50,7 @@ sol! {
 
 pub struct OPSuccinctHost {
     pub kona_args: SingleChainHost,
+    pub hana_args: CelestiaCfg,
 }
 
 /// Get the stdin to generate a proof for the given L2 claim.
@@ -96,9 +98,12 @@ pub fn get_agg_proof_stdin(
 /// Start the server and native client. Each server is tied to a single client.
 pub async fn start_server_and_native_client(
     cfg: SingleChainHost,
+    hana_args: CelestiaCfg,
 ) -> Result<InMemoryOracle, anyhow::Error> {
-    let host = OPSuccinctHost { kona_args: cfg };
-
+    let host = OPSuccinctHost {
+        kona_args: cfg,
+        hana_args: hana_args,
+    };
     info!("Starting preimage server and client program.");
     let in_memory_oracle = host.run().await?;
 
@@ -113,10 +118,24 @@ impl OPSuccinctHost {
         let hint = BidirectionalChannel::new()?;
         let preimage = BidirectionalChannel::new()?;
 
-        let server_task = self
-            .kona_args
-            .start_server(hint.host, preimage.host)
-            .await?;
+        let server_task = {
+            #[cfg(feature = "celestia")]
+            {
+                let celestia_host = CelestiaChainHost {
+                    single_host: self.kona_args.clone(),
+                    celestia_args: self.hana_args.clone(),
+                };
+
+                celestia_host.start_server(hint.host, preimage.host).await?
+            }
+
+            #[cfg(not(feature = "celestia"))]
+            {
+                self.kona_args
+                    .start_server(hint.host, preimage.host)
+                    .await?
+            }
+        };
 
         let in_memory_oracle = self
             .run_witnessgen_client(preimage.client, hint.client)

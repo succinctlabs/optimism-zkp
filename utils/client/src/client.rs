@@ -3,6 +3,8 @@ use alloy_primitives::{Sealed, B256};
 use alloy_rlp::Decodable;
 use anyhow::anyhow;
 use anyhow::Result;
+use hana_oracle::pipeline::OraclePipeline as CelestiaOraclePipeline;
+use hana_oracle::provider::OracleCelestiaProvider;
 use kona_derive::errors::PipelineError;
 use kona_derive::errors::PipelineErrorKind;
 use kona_derive::traits::Pipeline;
@@ -15,6 +17,7 @@ use kona_driver::DriverResult;
 use kona_driver::Executor;
 use kona_driver::TipCursor;
 use kona_executor::{KonaHandleRegister, TrieDBProvider};
+use kona_preimage::PreimageOracleClient;
 use kona_preimage::{CommsClient, PreimageKey};
 use kona_proof::errors::OracleProviderError;
 use kona_proof::executor::KonaExecutor;
@@ -43,7 +46,7 @@ pub async fn run_opsuccinct_client<O>(
     handle_register: Option<KonaHandleRegister<OracleL2ChainProvider<O>, OracleL2ChainProvider<O>>>,
 ) -> Result<BootInfo>
 where
-    O: CommsClient + FlushableCache + Send + Sync + Debug,
+    O: PreimageOracleClient + CommsClient + FlushableCache + Send + Sync + Debug,
 {
     ////////////////////////////////////////////////////////////////
     //                          PROLOGUE                          //
@@ -66,6 +69,8 @@ where
     let mut l2_provider =
         OracleL2ChainProvider::new(safe_head_hash, rollup_config.clone(), oracle.clone());
     let beacon = OPSuccinctOracleBlobProvider::new(oracle.clone());
+    // TODO: Hide under feature flag
+    let celestia_provider = OracleCelestiaProvider::new(oracle.clone());
 
     // Fetch the safe head's block header.
     let safe_head = l2_provider
@@ -105,14 +110,27 @@ where
     .await?;
     l2_provider.set_cursor(cursor.clone());
 
-    let pipeline = OraclePipeline::new(
+    //CelestiaOraclePipeline
+
+    let pipeline = CelestiaOraclePipeline::new(
         rollup_config.clone(),
         cursor.clone(),
         oracle.clone(),
         beacon,
         l1_provider.clone(),
         l2_provider.clone(),
+        celestia_provider.clone(),
     );
+
+    // TODO: Hide the Celestia Oracle Pipeline behind a feature flag
+    // let pipeline = OraclePipeline::new(
+    //     rollup_config.clone(),
+    //     cursor.clone(),
+    //     oracle.clone(),
+    //     beacon,
+    //     l1_provider.clone(),
+    //     l2_provider.clone(),
+    // );
     let executor = KonaExecutor::new(
         &rollup_config,
         l2_provider.clone(),

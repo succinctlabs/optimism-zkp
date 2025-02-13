@@ -64,3 +64,10 @@ clap.workspace = true
 sysinfo = "0.32.0"
 async-trait.workspace = true
 tracing.workspace = true
+
+# hana
+hana-host.workspace = true
+
+[features]
+default = ["celestia"]
+celestia = []

@@ -17,6 +17,9 @@ path = "bin/server.rs"
 tokio.workspace = true
 alloy-primitives.workspace = true
 
+# hana
+hana-host.workspace = true
+
 # local
 op-succinct-host-utils.workspace = true
 

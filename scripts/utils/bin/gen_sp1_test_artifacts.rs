@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use futures::StreamExt;
+use hana_host::celestia::CelestiaCfg;
 use log::info;
 use op_succinct_host_utils::{
     block_range::{get_validated_block_range, split_range_basic},
@@ -56,9 +57,16 @@ async fn main() -> Result<()> {
 
     let mut successful_ranges = Vec::new();
     for (range, host_cli) in split_ranges.iter().zip(host_clis.iter()) {
-        let oracle = start_server_and_native_client(host_cli.clone())
-            .await
-            .unwrap();
+        let oracle = start_server_and_native_client(
+            host_cli.clone(),
+            CelestiaCfg {
+                celestia_connection: None,
+                auth_token: None,
+                namespace: None,
+            },
+        )
+        .await
+        .unwrap();
         let sp1_stdin = get_proof_stdin(oracle).unwrap();
         successful_ranges.push((sp1_stdin, range.clone()));
     }

@@ -38,6 +38,8 @@ use std::{
 };
 use tower_http::limit::RequestBodyLimitLayer;
 
+use hana_host::celestia::CelestiaCfg;
+
 pub const RANGE_ELF: &[u8] = include_bytes!("../../../elf/range-elf");
 pub const AGG_ELF: &[u8] = include_bytes!("../../../elf/aggregation-elf");
 
@@ -158,6 +160,7 @@ async fn request_span_proof(
         }
     };
 
+    // TODO (Diego): Add a way for fetcher to get celestia args if they exist
     let host_cli = match fetcher
         .get_host_cli_args(
             payload.start,
@@ -177,7 +180,15 @@ async fn request_span_proof(
         }
     };
 
-    let mem_kv_store = start_server_and_native_client(host_cli).await?;
+    let mem_kv_store = start_server_and_native_client(
+        host_cli,
+        CelestiaCfg {
+            celestia_connection: None,
+            auth_token: None,
+            namespace: None,
+        },
+    )
+    .await?;
 
     let sp1_stdin = match get_proof_stdin(mem_kv_store) {
         Ok(stdin) => stdin,
@@ -355,7 +366,15 @@ async fn request_mock_span_proof(
     };
 
     let start_time = Instant::now();
-    let oracle = start_server_and_native_client(host_cli.clone()).await?;
+    let oracle = start_server_and_native_client(
+        host_cli.clone(),
+        CelestiaCfg {
+            celestia_connection: None,
+            auth_token: None,
+            namespace: None,
+        },
+    )
+    .await?;
     let witness_generation_duration = start_time.elapsed();
 
     let sp1_stdin = match get_proof_stdin(oracle) {

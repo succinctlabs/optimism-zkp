@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use hana_host::celestia::CelestiaCfg;
 use op_succinct_host_utils::{
     block_range::get_validated_block_range,
     fetcher::{CacheMode, OPSuccinctDataFetcher, RunContext},
@@ -37,7 +38,15 @@ async fn main() -> Result<()> {
         .await?;
 
     let start_time = Instant::now();
-    let oracle = start_server_and_native_client(host_cli.clone()).await?;
+    let oracle = start_server_and_native_client(
+        host_cli.clone(),
+        CelestiaCfg {
+            celestia_connection: None,
+            auth_token: None,
+            namespace: None,
+        },
+    )
+    .await?;
     let witness_generation_duration = start_time.elapsed();
 
     // Get the stdin for the block.

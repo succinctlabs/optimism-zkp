@@ -54,6 +54,12 @@ kona-client = { git = "https://github.com/op-rs/kona", tag = "kona-client/v0.1.0
 kona-host = { git = "https://github.com/op-rs/kona", tag = "kona-client/v0.1.0-beta.9" }
 kona-providers-alloy = { git = "https://github.com/op-rs/kona", tag = "kona-client/v0.1.0-beta.9" }
 
+# hana
+hana-oracle = { path = "/home/dferrer/repos/hana/crates/oracle" }
+hana-celestia = { path = "/home/dferrer/repos/hana/crates/celestia" }
+hana-host = { path = "/home/dferrer/repos/hana/bin/host" }
+hana-client = { path = "/home/dferrer/repos/hana/bin/client" }
+
 # op-succinct
 op-succinct-prove = { path = "scripts/prove" }
 op-succinct-client-utils = { path = "utils/client" }

@@ -55,6 +55,9 @@ serde_json.workspace = true
 # kona
 kona-host.workspace = true
 
+# hana
+hana-host.workspace = true
+
 # local
 op-succinct-host-utils.workspace = true
 op-succinct-client-utils.workspace = true

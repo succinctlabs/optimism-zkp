@@ -29,6 +29,9 @@ csv.workspace = true
 kona-host.workspace = true
 kona-preimage.workspace = true
 
+# hana
+hana-host.workspace = true
+
 # local
 op-succinct-host-utils.workspace = true
 op-succinct-client-utils.workspace = true

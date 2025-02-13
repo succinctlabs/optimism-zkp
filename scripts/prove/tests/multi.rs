@@ -1,5 +1,6 @@
 use anyhow::Result;
 use common::post_to_github_pr;
+use hana_host::celestia::CelestiaCfg;
 use op_succinct_host_utils::{
     block_range::get_rolling_block_range,
     fetcher::{CacheMode, OPSuccinctDataFetcher, RunContext},
@@ -30,7 +31,15 @@ async fn execute_batch() -> Result<()> {
         )
         .await?;
 
-    let oracle = start_server_and_native_client(host_cli.clone()).await?;
+    let oracle = start_server_and_native_client(
+        host_cli.clone(),
+        CelestiaCfg {
+            celestia_connection: None,
+            auth_token: None,
+            namespace: None,
+        },
+    )
+    .await?;
 
     // Get the stdin for the block.
     let sp1_stdin = get_proof_stdin(oracle)?;

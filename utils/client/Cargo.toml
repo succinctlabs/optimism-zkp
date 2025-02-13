@@ -36,6 +36,9 @@ kona-proof.workspace = true
 kona-executor.workspace = true
 kona-driver.workspace = true
 
+# workspace (hana)
+hana-oracle.workspace = true
+
 # general
 serde.workspace = true
 rkyv.workspace = true
