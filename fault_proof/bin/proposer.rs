@@ -2,7 +2,7 @@ use std::{env, time::Duration};
 
 use alloy_eips::BlockNumberOrTag;
 use alloy_network::Ethereum;
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{Address, TxHash, U256};
 use alloy_provider::{fillers::TxFiller, Provider, ProviderBuilder};
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::SolValue;
@@ -92,6 +92,109 @@ where
         })
     }
 
+    async fn prove_game(&self, game_address: Address) -> Result<TxHash> {
+        let fetcher = match OPSuccinctDataFetcher::new_with_rollup_config(RunContext::Dev).await {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::error!("Failed to create data fetcher: {}", e);
+                return Err(anyhow::anyhow!("Failed to create data fetcher: {}", e));
+            }
+        };
+
+        let game =
+            OPSuccinctFaultDisputeGame::new(game_address, self.l1_provider_with_wallet.clone());
+        let l1_head_hash = game.l1Head().call().await?.l1Head_;
+        tracing::debug!("L1 head hash: {:?}", hex::encode(l1_head_hash));
+        let l2_block_number = game.l2BlockNumber().call().await?.l2BlockNumber_;
+
+        let host_args = match fetcher
+            .get_host_args(
+                l2_block_number.to::<u64>() - self.config.proposal_interval_in_blocks,
+                l2_block_number.to::<u64>(),
+                Some(l1_head_hash),
+                ProgramType::Multi,
+                CacheMode::DeleteCache,
+            )
+            .await
+        {
+            Ok(cli) => cli,
+            Err(e) => {
+                tracing::error!("Failed to get host CLI args: {}", e);
+                return Err(anyhow::anyhow!("Failed to get host CLI args: {}", e));
+            }
+        };
+
+        let mem_kv_store = start_server_and_native_client(host_args).await?;
+
+        let sp1_stdin = match get_proof_stdin(mem_kv_store) {
+            Ok(stdin) => stdin,
+            Err(e) => {
+                tracing::error!("Failed to get proof stdin: {}", e);
+                return Err(anyhow::anyhow!("Failed to get proof stdin: {}", e));
+            }
+        };
+
+        tracing::info!("Generating Range Proof");
+        let range_proof = self
+            .prover
+            .network_prover
+            .prove(&self.prover.range_pk, &sp1_stdin)
+            .compressed()
+            .strategy(FulfillmentStrategy::Hosted)
+            .skip_simulation(true)
+            .cycle_limit(1_000_000_000_000)
+            .run_async()
+            .await?;
+
+        tracing::info!("Preparing Stdin for Agg Proof");
+        let proof = range_proof.proof.clone();
+        let mut public_values = range_proof.public_values.clone();
+        let boot_info: BootInfoStruct = public_values.read();
+
+        let headers = match fetcher
+            .get_header_preimages(&vec![boot_info.clone()], boot_info.clone().l1Head)
+            .await
+        {
+            Ok(headers) => headers,
+            Err(e) => {
+                tracing::error!("Failed to get header preimages: {}", e);
+                return Err(anyhow::anyhow!("Failed to get header preimages: {}", e));
+            }
+        };
+
+        let sp1_stdin = match get_agg_proof_stdin(
+            vec![proof],
+            vec![boot_info.clone()],
+            headers,
+            &self.prover.range_vk,
+            boot_info.l1Head,
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("Failed to get agg proof stdin: {}", e);
+                return Err(anyhow::anyhow!("Failed to get agg proof stdin: {}", e));
+            }
+        };
+
+        tracing::info!("Generating Agg Proof");
+        let agg_proof = self
+            .prover
+            .network_prover
+            .prove(&self.prover.agg_pk, &sp1_stdin)
+            .groth16()
+            .run_async()
+            .await?;
+
+        let receipt = game
+            .prove(agg_proof.bytes().into())
+            .send()
+            .await?
+            .get_receipt()
+            .await?;
+
+        Ok(receipt.transaction_hash)
+    }
+
     /// Creates a new game with the given parameters.
     ///
     /// `l2_block_number`: the L2 block number we are proposing the output root for.
@@ -135,109 +238,11 @@ where
         if self.config.fast_finality_mode {
             tracing::info!("Fast finality mode enabled: Generating proof for the game immediately");
 
-            let fetcher = match OPSuccinctDataFetcher::new_with_rollup_config(RunContext::Dev).await
-            {
-                Ok(f) => f,
-                Err(e) => {
-                    tracing::error!("Failed to create data fetcher: {}", e);
-                    return Err(anyhow::anyhow!("Failed to create data fetcher: {}", e));
-                }
-            };
-
-            let game =
-                OPSuccinctFaultDisputeGame::new(game_address, self.l1_provider_with_wallet.clone());
-            let l1_head_hash = game.l1Head().call().await?.l1Head_;
-            tracing::debug!("L1 head hash: {:?}", hex::encode(l1_head_hash));
-
-            let host_args = match fetcher
-                .get_host_args(
-                    l2_block_number.to::<u64>() - self.config.proposal_interval_in_blocks,
-                    l2_block_number.to::<u64>(),
-                    Some(l1_head_hash),
-                    ProgramType::Multi,
-                    CacheMode::DeleteCache,
-                )
-                .await
-            {
-                Ok(cli) => cli,
-                Err(e) => {
-                    tracing::error!("Failed to get host CLI args: {}", e);
-                    return Err(anyhow::anyhow!("Failed to get host CLI args: {}", e));
-                }
-            };
-
-            let mem_kv_store = start_server_and_native_client(host_args).await?;
-
-            let sp1_stdin = match get_proof_stdin(mem_kv_store) {
-                Ok(stdin) => stdin,
-                Err(e) => {
-                    tracing::error!("Failed to get proof stdin: {}", e);
-                    return Err(anyhow::anyhow!("Failed to get proof stdin: {}", e));
-                }
-            };
-
-            tracing::info!("Generating Range Proof");
-            let range_proof = self
-                .prover
-                .network_prover
-                .prove(&self.prover.range_pk, &sp1_stdin)
-                .compressed()
-                .strategy(FulfillmentStrategy::Hosted)
-                .skip_simulation(true)
-                .cycle_limit(1_000_000_000_000)
-                .run_async()
-                .await?;
-
-            tracing::info!("Preparing Stdin for Agg Proof");
-            let proof = range_proof.proof.clone();
-            let mut public_values = range_proof.public_values.clone();
-            let boot_info: BootInfoStruct = public_values.read();
-
-            let headers = match fetcher
-                .get_header_preimages(&vec![boot_info.clone()], boot_info.clone().l1Head)
-                .await
-            {
-                Ok(headers) => headers,
-                Err(e) => {
-                    tracing::error!("Failed to get header preimages: {}", e);
-                    return Err(anyhow::anyhow!("Failed to get header preimages: {}", e));
-                }
-            };
-
-            let sp1_stdin = match get_agg_proof_stdin(
-                vec![proof],
-                vec![boot_info.clone()],
-                headers,
-                &self.prover.range_vk,
-                boot_info.l1Head,
-            ) {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::error!("Failed to get agg proof stdin: {}", e);
-                    return Err(anyhow::anyhow!("Failed to get agg proof stdin: {}", e));
-                }
-            };
-
-            tracing::info!("Generating Agg Proof");
-            let agg_proof = self
-                .prover
-                .network_prover
-                .prove(&self.prover.agg_pk, &sp1_stdin)
-                .groth16()
-                .run_async()
-                .await?;
-
-            let receipt = game
-                .prove(agg_proof.bytes().into())
-                .send()
-                .await?
-                .get_receipt()
-                .await?;
-
+            let tx_hash = self.prove_game(game_address).await?;
             tracing::info!(
-                "\x1b[1mSuccessfully proved game {:?} with tx {:?}\x1b[0m",
+                "\x1b[1mNew game at address {:?} proved with tx {:?}\x1b[0m",
                 game_address,
-                receipt.transaction_hash
+                tx_hash
             );
         }
 
@@ -317,6 +322,31 @@ where
             .await
     }
 
+    /// Handles the defense of all eligible games by providing proofs.
+    async fn handle_game_defense(&self) -> Result<()> {
+        let _span = tracing::info_span!("[[Defending]]").entered();
+
+        if let Some(game_address) = self
+            .factory
+            .get_oldest_defensible_game_address(
+                self.config.max_games_to_check_for_defense,
+                self.l2_provider.clone(),
+            )
+            .await?
+        {
+            tracing::info!("Attempting to defend game {:?}", game_address);
+
+            let tx_hash = self.prove_game(game_address).await?;
+            tracing::info!(
+                "\x1b[1mSuccessfully defended game {:?} with tx {:?}\x1b[0m",
+                game_address,
+                tx_hash
+            );
+        }
+
+        Ok(())
+    }
+
     /// Runs the proposer indefinitely.
     async fn run(&self) -> Result<()> {
         tracing::info!("OP Succinct Proposer running...");
@@ -327,6 +357,10 @@ where
 
             if let Err(e) = self.handle_game_creation().await {
                 tracing::warn!("Failed to handle game creation: {:?}", e);
+            }
+
+            if let Err(e) = self.handle_game_defense().await {
+                tracing::warn!("Failed to handle game defense: {:?}", e);
             }
 
             if let Err(e) = self.handle_game_resolution().await {
