@@ -1,5 +1,6 @@
 pub mod config;
 pub mod contract;
+pub mod proposer;
 pub mod utils;
 
 use alloy_eips::BlockNumberOrTag;
