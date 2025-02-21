@@ -1,8 +1,8 @@
 # Testing Guide
 
 This guide explains how to run and understand the test suite for the OP Succinct fault dispute game system. Tests are located in:
-- End-to-end tests: [fault_proof/tests/e2e.rs](../../fault_proof/tests/e2e.rs)
-- Integration tests: [fault_proof/tests/integration.rs](../../fault_proof/tests/integration.rs)
+- End-to-end tests: fault_proof/tests/e2e.rs
+- Integration tests: fault_proof/tests/integration.rs
 
 ## Prerequisites
 
