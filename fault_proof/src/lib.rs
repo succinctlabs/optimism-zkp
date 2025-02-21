@@ -1,5 +1,6 @@
 pub mod config;
 pub mod contract;
+pub mod proposer;
 pub mod utils;
 
 use alloy_eips::BlockNumberOrTag;
@@ -147,14 +148,25 @@ where
     /// This function returns the L2 block number of the anchor game for a given game type.
     async fn get_anchor_l2_block_number(&self, game_type: u32) -> Result<U256>;
 
-    /// Get the oldest challengable game address
+    /// Get the oldest challengable game address.
     ///
-    /// This function checks a window of recent games, starting from
-    /// (latest_game_index - max_games_to_check_for_challenge) up to latest_game_index
+    /// This function checks a window of recent games, starting from.
+    /// (latest_game_index - max_games_to_check_for_challenge) up to latest_game_index.
     async fn get_oldest_challengable_game_address(
         &self,
         max_games_to_check_for_challenge: u64,
-        l1_provider: L1Provider,
+        l2_provider: L2Provider,
+    ) -> Result<Option<Address>>;
+
+    /// Get the oldest defensible game address.
+    ///
+    /// Defensible games are games with valid claims that have been challenged but have not been proven yet.
+    ///
+    /// This function checks a window of recent games, starting from
+    /// (latest_game_index - max_games_to_check_for_defense) up to latest_game_index.
+    async fn get_oldest_defensible_game_address(
+        &self,
+        max_games_to_check_for_defense: u64,
         l2_provider: L2Provider,
     ) -> Result<Option<Address>>;
 
@@ -245,7 +257,7 @@ where
 
         let mut block_number;
 
-        // Loop through games in reverse order (latest to earliest) to find the most recent valid game
+        // Loop through games in reverse order (latest to earliest) to find the most recent valid game.
         loop {
             // Get the game contract for the current index.
             let game_address = self.fetch_game_address_by_index(game_index).await?;
@@ -313,37 +325,36 @@ where
         Ok(anchor_l2_block_number)
     }
 
-    /// Get the oldest challengable game address
+    /// Get the oldest challengable game address.
     ///
     /// This function checks a window of recent games, starting from
-    /// (latest_game_index - max_games_to_check_for_challenge) up to latest_game_index
+    /// (latest_game_index - max_games_to_check_for_challenge) up to latest_game_index.
     async fn get_oldest_challengable_game_address(
         &self,
         max_games_to_check_for_challenge: u64,
-        l1_provider: L1Provider,
         l2_provider: L2Provider,
     ) -> Result<Option<Address>> {
-        // Get latest game index, return None if no games exist
+        // Get latest game index, return None if no games exist.
         let Some(latest_game_index) = self.fetch_latest_game_index().await? else {
             tracing::info!("No games exist yet");
             return Ok(None);
         };
 
-        // Start from the latest game index - max_games_to_check_for_challenge
+        // Start from the latest game index - max_games_to_check_for_challenge.
         let mut game_index =
             latest_game_index.saturating_sub(U256::from(max_games_to_check_for_challenge));
         let mut game_address;
         let mut block_number;
 
         loop {
-            // If we've reached last index and still haven't found a valid proposal
+            // If we've reached last index and still haven't found a valid proposal, return `None`.
             if game_index > latest_game_index {
                 tracing::info!("No invalid proposals found after checking all games");
                 return Ok(None);
             }
 
             game_address = self.fetch_game_address_by_index(game_index).await?;
-            let game = OPSuccinctFaultDisputeGame::new(game_address, l1_provider.clone());
+            let game = OPSuccinctFaultDisputeGame::new(game_address, self.provider());
 
             let claim_data = game.claimData().call().await?.claimData_;
             if claim_data.status != ProposalStatus::Unchallenged {
@@ -357,7 +368,7 @@ where
                 continue;
             }
 
-            // Check if the the game is still in the challenge window
+            // Check if the the game is still in the challenge window.
             let current_timestamp = l2_provider
                 .get_l2_block_by_number(BlockNumberOrTag::Latest)
                 .await?
@@ -411,6 +422,116 @@ where
         Ok(Some(game_address))
     }
 
+    /// Get the oldest defensible game address.
+    ///
+    /// Defensible games are games with valid claims that have been challenged but have not been proven yet.
+    ///
+    /// This function checks a window of recent games, starting from
+    /// (latest_game_index - max_games_to_check_for_defense) up to latest_game_index.
+    async fn get_oldest_defensible_game_address(
+        &self,
+        max_games_to_check_for_defense: u64,
+        l2_provider: L2Provider,
+    ) -> Result<Option<Address>> {
+        // Find latest game index, return early if no games exist.
+        let Some(latest_game_index) = self.fetch_latest_game_index().await? else {
+            tracing::info!("No games exist, skipping defense");
+            return Ok(None);
+        };
+
+        let mut game_index =
+            latest_game_index.saturating_sub(U256::from(max_games_to_check_for_defense));
+        let mut game_address;
+        let mut block_number;
+
+        loop {
+            // If the last index is reached and still haven't found a defensible game, return `None`.
+            if game_index > latest_game_index {
+                tracing::info!("No defensible games found after checking all games");
+                return Ok(None);
+            }
+
+            game_address = self.fetch_game_address_by_index(game_index).await?;
+            let game = OPSuccinctFaultDisputeGame::new(game_address, self.provider());
+
+            let claim_data = game.claimData().call().await?.claimData_;
+            if claim_data.status != ProposalStatus::Challenged {
+                tracing::debug!(
+                    "Game {:?} at index {:?} is not challenged, not attempting to defend",
+                    game_address,
+                    game_index
+                );
+                game_index += U256::from(1);
+                continue;
+            }
+
+            // Check if the game has already been proven.
+            if claim_data.status == ProposalStatus::ChallengedAndValidProofProvided {
+                tracing::info!(
+                    "Game {:?} at index {:?} has already been proven, not attempting to defend",
+                    game_address,
+                    game_index
+                );
+                game_index += U256::from(1);
+                continue;
+            }
+
+            // Check if the game is still in the proof submission window.
+            let current_timestamp = l2_provider
+                .get_l2_block_by_number(BlockNumberOrTag::Latest)
+                .await?
+                .header
+                .timestamp;
+            let deadline = U256::from(claim_data.deadline).to::<u64>();
+            if deadline < current_timestamp {
+                tracing::info!(
+                    "Game {:?} at index {:?}, deadline {:?} has passed, current timestamp {:?}, not attempting to defend",
+                    game_address,
+                    game_index,
+                    deadline,
+                    current_timestamp
+                );
+                game_index += U256::from(1);
+                continue;
+            }
+
+            // Check if the game has a valid claim.
+            block_number = game.l2BlockNumber().call().await?.l2BlockNumber_;
+            tracing::info!(
+                "Checking if game {:?} at index {:?} for block {:?} is valid",
+                game_address,
+                game_index,
+                block_number
+            );
+            let game_claim = game.rootClaim().call().await?.rootClaim_;
+
+            let output_root = l2_provider
+                .compute_output_root_at_block(block_number)
+                .await?;
+
+            if output_root == game_claim {
+                tracing::info!(
+                    "Output root {:?} at block {:?} is same as game claim {:?}",
+                    output_root,
+                    block_number,
+                    game_claim
+                );
+                break;
+            }
+
+            game_index += U256::from(1);
+        }
+
+        tracing::info!(
+            "Oldest defensible game {:?} at game index {:?} with l2 block number: {:?}",
+            game_address,
+            game_index,
+            block_number
+        );
+
+        Ok(Some(game_address))
+    }
+
     /// Determines if we should attempt resolution or not. The `oldest_game_index` is configured
     /// to be `latest_game_index` - `max_games_to_check_for_resolution`.
     ///
@@ -424,8 +545,8 @@ where
         let oldest_game = OPSuccinctFaultDisputeGame::new(oldest_game_address, self.provider());
         let parent_game_index = oldest_game.claimData().call().await?.claimData_.parentIndex;
 
-        // Always attempt resolution for first games (those with parent_game_index == u32::MAX)
-        // For other games, only attempt if the oldest game's parent game is resolved
+        // Always attempt resolution for first games (those with parent_game_index == u32::MAX).
+        // For other games, only attempt if the oldest game's parent game is resolved.
         if parent_game_index == u32::MAX {
             Ok((true, oldest_game_address))
         } else {
@@ -529,7 +650,7 @@ where
         l1_provider_with_wallet: L1ProviderWithWallet<F, P>,
         l2_provider: L2Provider,
     ) -> Result<()> {
-        // Find latest game index, return early if no games exist
+        // Find latest game index, return early if no games exist.
         let Some(latest_game_index) = self.fetch_latest_game_index().await? else {
             tracing::info!("No games exist, skipping resolution");
             return Ok(());
