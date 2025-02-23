@@ -7,11 +7,11 @@ use alloy_sol_types::SolValue;
 use anyhow::Result;
 use anyhow::{anyhow, bail};
 use cargo_metadata::MetadataCommand;
+use kona_genesis::RollupConfig;
 use kona_host::single::SingleChainHost;
-use maili_genesis::RollupConfig;
-use maili_protocol::calculate_tx_l1_cost_fjord;
-use maili_protocol::L2BlockInfo;
-use maili_rpc::{OutputResponse, SafeHeadResponse};
+use kona_protocol::calculate_tx_l1_cost_fjord;
+use kona_protocol::L2BlockInfo;
+use kona_rpc::{OutputResponse, SafeHeadResponse};
 use op_alloy_consensus::OpBlock;
 use op_alloy_network::{
     primitives::{BlockTransactions, BlockTransactionsKind, HeaderResponse},
@@ -845,6 +845,18 @@ impl OPSuccinctDataFetcher {
             .get_l2_header(finalized_l2_header_minus_1.into())
             .await?;
         Ok(finalized_l2_header.timestamp - l2_block_minus_1.timestamp)
+    }
+
+    pub async fn get_l2_output_at_block(&self, block_number: u64) -> Result<OutputResponse> {
+        let block_number_hex = format!("0x{:x}", block_number);
+        let l2_output_data: OutputResponse = self
+            .fetch_rpc_data_with_mode(
+                RPCMode::L2Node,
+                "optimism_outputAtBlock",
+                vec![block_number_hex.into()],
+            )
+            .await?;
+        Ok(l2_output_data)
     }
 
     /// Get the L1 block from which the `l2_end_block` can be derived.

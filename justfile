@@ -105,9 +105,6 @@ deploy-oracle env_file=".env":
     # cd into contracts directory
     cd contracts
 
-    # forge install
-    forge install
-
     VERIFY=""
     if [ $ETHERSCAN_API_KEY != "" ]; then
       VERIFY="--verify --verifier etherscan --etherscan-api-key $ETHERSCAN_API_KEY"
@@ -118,7 +115,7 @@ deploy-oracle env_file=".env":
     if [ -n "${DEPLOY_PK:-}" ]; then ENV_VARS="$ENV_VARS DEPLOY_PK=$DEPLOY_PK"; fi
     
     # Run the forge deployment script
-    $ENV_VARS forge script script/OPSuccinctDeployer.s.sol:OPSuccinctDeployer \
+    $ENV_VARS forge script script/validity/OPSuccinctDeployer.s.sol:OPSuccinctDeployer \
         --rpc-url $L1_RPC \
         --private-key $PRIVATE_KEY \
         --broadcast \
@@ -186,7 +183,7 @@ update-parameters env_file=".env":
             ${EXECUTE_UPGRADE_CALL:+EXECUTE_UPGRADE_CALL="$EXECUTE_UPGRADE_CALL"} \
             ${ADMIN_PK:+ADMIN_PK="$ADMIN_PK"} \
             ${DEPLOY_PK:+DEPLOY_PK="$DEPLOY_PK"} \
-            forge script script/OPSuccinctParameterUpdater.s.sol:OPSuccinctParameterUpdater \
+            forge script script/validity/OPSuccinctParameterUpdater.s.sol:OPSuccinctParameterUpdater \
             --rpc-url $L1_RPC \
             --private-key $PRIVATE_KEY \
             --broadcast
@@ -195,7 +192,7 @@ update-parameters env_file=".env":
             ${EXECUTE_UPGRADE_CALL:+EXECUTE_UPGRADE_CALL="$EXECUTE_UPGRADE_CALL"} \
             ${ADMIN_PK:+ADMIN_PK="$ADMIN_PK"} \
             ${DEPLOY_PK:+DEPLOY_PK="$DEPLOY_PK"} \
-            forge script script/OPSuccinctParameterUpdater.s.sol:OPSuccinctParameterUpdater \
+            forge script script/validity/OPSuccinctParameterUpdater.s.sol:OPSuccinctParameterUpdater \
             --rpc-url $L1_RPC \
             --private-key $PRIVATE_KEY \
             --broadcast

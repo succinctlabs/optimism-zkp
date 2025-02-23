@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.4
-
 # Build stage
 FROM ubuntu:24.04 AS builder
 
@@ -41,8 +39,8 @@ COPY scripts ./scripts
 RUN --mount=type=ssh \
     --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/build/target \
-    cargo build --bin server --release && \
-    cp target/release/server /build/server
+    cargo build --bin validity --release && \
+    cp target/release/validity /build/validity
 
 # Final stage
 FROM ubuntu:24.04
@@ -73,11 +71,14 @@ RUN curl -L https://sp1.succinct.xyz | bash && \
     ~/.sp1/bin/cargo-prove prove --version
 
 # Copy only the built binaries from builder
-COPY --from=builder /build/server /usr/local/bin/server
+COPY --from=builder /build/validity /usr/local/bin/validity
 
 # Expose port based on environment variable or default to 3000
 ENV PORT=${PORT:-3000}
 EXPOSE $PORT
 
+# Set jemalloc flags to aggressively release memory to avoid memory fragmentation.
+ENV JEMALLOC_SYS_WITH_MALLOC_CONF="background_thread:true,narenas:1,tcache:false,dirty_decay_ms:0,muzzy_decay_ms:0,abort_conf:true"
+
 # Run the server from its permanent location
-CMD ["/usr/local/bin/server"]
+CMD ["/usr/local/bin/validity"]

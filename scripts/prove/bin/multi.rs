@@ -11,6 +11,7 @@ use op_succinct_prove::{execute_multi, DEFAULT_RANGE, RANGE_ELF};
 use op_succinct_scripts::HostExecutorArgs;
 use sp1_sdk::{utils, ProverClient};
 use std::{fs, time::Instant};
+use tracing::debug;
 
 /// Execute the OP Succinct program for multiple blocks.
 #[tokio::main]
@@ -41,6 +42,8 @@ async fn main() -> Result<()> {
             cache_mode,
         )
         .await?;
+
+    debug!("Host args: {:?}", host_args);
 
     let start_time = Instant::now();
     let oracle = start_server_and_native_client(host_args.clone()).await?;
