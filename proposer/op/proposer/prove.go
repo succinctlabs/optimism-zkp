@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"strings"
@@ -243,6 +244,16 @@ func (l *L2OutputSubmitter) DeriveAggProofs(ctx context.Context) error {
 	minTo, err := l.l2ooContract.NextBlockNumber(&bind.CallOpts{Context: ctx})
 	if err != nil {
 		return fmt.Errorf("failed to get next L2OO output: %w", err)
+	}
+
+	// Calculate how it would be using the offchain value
+	if l.Cfg.SubmissionInterval != 0 {
+		offChainMinTo := latest.Uint64() + l.Cfg.SubmissionInterval
+		if offChainMinTo < minTo.Uint64() {
+			return fmt.Errorf("next block using offchain submission interval cannot be lower than onchain min bound")
+		}
+
+		minTo = new(big.Int).SetUint64(offChainMinTo)
 	}
 
 	created, end, err := l.db.TryCreateAggProofFromSpanProofs(latest.Uint64(), minTo.Uint64())

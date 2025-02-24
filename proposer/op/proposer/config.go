@@ -92,6 +92,8 @@ type CLIConfig struct {
 	MaxConcurrentProofRequests uint64
 	// Mock is a flag to use the mock OP Succinct server.
 	Mock bool
+	// Submission interval, must be greater than onchain minbound
+	SubmissionInterval uint64
 }
 
 func (c *CLIConfig) Check() error {
@@ -158,6 +160,7 @@ func NewConfig(ctx *cli.Context) *CLIConfig {
 		OPSuccinctServerUrl:          ctx.String(flags.OPSuccinctServerUrlFlag.Name),
 		MaxConcurrentProofRequests:   ctx.Uint64(flags.MaxConcurrentProofRequestsFlag.Name),
 		Mock:                         ctx.Bool(flags.MockFlag.Name),
+		SubmissionInterval:           ctx.Uint64(flags.SubmissionIntervalFlag.Name),
 		DGFAddress:                   ctx.String(flags.DGFAddressFlag.Name),
 
 		// NOTE(fakedev9999): GameType 6 is the game type for the op-succinct proof system.

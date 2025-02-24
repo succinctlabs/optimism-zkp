@@ -64,6 +64,9 @@ type ProposerConfig struct {
 	OPSuccinctServerUrl        string
 	MaxConcurrentProofRequests uint64
 	Mock                       bool
+
+	// How frequently aggregate proofs and propose outputs
+	SubmissionInterval uint64
 }
 
 type ProposerService struct {

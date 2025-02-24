@@ -130,6 +130,12 @@ var (
 		Value:   false,
 		EnvVars: prefixEnvVars("OP_SUCCINCT_MOCK"),
 	}
+	SubmissionIntervalFlag = &cli.Uint64Flag{
+		Name:    "submission-interval",
+		Usage:   "Submission interval, must be greater than onchain minbound. O = uses onchain value.",
+		Value:   0,
+		EnvVars: prefixEnvVars("SUBMISSION_INTERVAL"),
+	}
 
 	// Legacy Flags
 	L2OutputHDPathFlag = txmgr.L2OutputHDPathFlag
