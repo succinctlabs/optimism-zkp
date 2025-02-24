@@ -646,12 +646,12 @@ func (l *L2OutputSubmitter) loopL2OO(ctx context.Context) {
 
 			// 4) Determine if there is a continguous chain of span proofs starting from the latest block on the L2OO contract.
 			// If there is, queue an aggregate proof for all of the span proofs.
-			l.Log.Info("Stage 4: Deriving Agg Proofs...")
-			err = l.DeriveAggProofs(ctx)
-			if err != nil {
-				l.Log.Error("failed to generate pending agg proofs", "err", err)
-				continue
-			}
+			// l.Log.Info("Stage 4: Deriving Agg Proofs...")
+			// err = l.DeriveAggProofs(ctx)
+			// if err != nil {
+			// 	l.Log.Error("failed to generate pending agg proofs", "err", err)
+			// 	continue
+			// }
 
 			// 5) Request all unrequested proofs from the prover network.
 			// Any DB entry with status = "UNREQ" means it's queued up and ready.

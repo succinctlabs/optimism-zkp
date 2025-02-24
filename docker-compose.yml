@@ -25,3 +25,9 @@ services:
     # The metrics port is the default port for the OP Proposer.
     ports:
       - "7300:7300"
+      - "8545:8545"
+
+networks:
+    default:
+      name: kt-op
+      external: true
